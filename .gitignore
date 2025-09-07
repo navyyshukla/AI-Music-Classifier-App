@@ -1,0 +1,14 @@
+# Ignore the separate deployment repository
+AI-Music-Classifier/
+
+# Ignore Python virtual environments
+.venv/
+.venv-stable/
+
+# Ignore large datasets and generated images
+Data/
+spectrograms_augmented/
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
