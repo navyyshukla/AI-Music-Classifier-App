@@ -1,316 +1,224 @@
-# app.py - UPDATED FOR CNN MODEL
+"""Streamlit front end for the music genre classifier.
 
-import streamlit as st
-import librosa
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import pandas as pd
-import time
+Analysis runs once per file and its result is kept in st.session_state, so changing any widget
+re-renders the results instead of wiping them.
+"""
+from __future__ import annotations
+
+import hashlib
 import os
-from datetime import datetime
-import warnings
-# --- NEW IMPORTS FOR CNN ---
-import tensorflow as tf
-from PIL import Image
-import io
-import matplotlib.pyplot as plt
+import tempfile
 
-warnings.filterwarnings('ignore')
+import numpy as np
+import plotly.graph_objects as go
+import streamlit as st
 
-# Page configuration (Your custom config is preserved)
-st.set_page_config(
-    page_title="AI Music Genre Classifier", 
-    page_icon="🎵", 
-    layout="wide",
-    initial_sidebar_state="expanded"
+from genre_classifier import config
+from genre_classifier.audio import AudioError, load_audio
+from genre_classifier.infer import GenrePredictor
+from genre_classifier.viz import mel_spectrogram_db, waveform_envelope
+
+st.set_page_config(page_title="AI Music Genre Classifier", page_icon="🎵", layout="wide")
+
+MIME = {"mp3": "audio/mpeg", "wav": "audio/wav", "flac": "audio/flac", "ogg": "audio/ogg", "m4a": "audio/mp4"}
+ACCENT, PINK = "#8b5cf6", "#ec4899"
+
+st.markdown(
+    """
+<style>
+  .block-container { max-width: 1150px; padding-top: 2rem; }
+  .hero { padding: 1.4rem 1.6rem; border-radius: 16px; margin-bottom: 1.2rem;
+          background: linear-gradient(120deg, #4c1d95, #be185d); }
+  .hero h1 { margin: 0; font-size: 2rem; color: #fff; }
+  .hero p  { margin: .3rem 0 0; color: #f3e8ff; opacity: .9; }
+  .result-card { padding: 1.4rem; border-radius: 16px; background: #161b26; border: 1px solid #2a3142; }
+  .result-card .label { font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b5; }
+  .result-card .genre { font-size: 2.4rem; font-weight: 700; margin: .1rem 0; }
+  .result-card .meta  { color: #c3c9d6; }
+  .uncertain .genre { color: #fbbf24; }
+  .confident .genre { color: #a78bfa; }
+  .note { color: #9aa3b5; font-size: .85rem; }
+</style>
+""",
+    unsafe_allow_html=True,
 )
 
-# Your Custom CSS is completely preserved
-st.markdown("""
-<style>
-    /* Main background gradient */
-    .main {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    }
-    
-    /* Custom header styling */
-    .main-header {
-        background: linear-gradient(90deg, #ff6b6b, #ee5a52, #ff8e53, #ff6b9d);
-        background-size: 400% 400%;
-        animation: gradient 15s ease infinite;
-        padding: 2rem;
-        border-radius: 20px;
-        text-align: center;
-        margin-bottom: 2rem;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-    }
-    
-    @keyframes gradient {
-        0% { background-position: 0% 50%; }
-        50% { background-position: 100% 50%; }
-        100% { background-position: 0% 50%; }
-    }
-    
-    /* Card styling */
-    .metric-card {
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 15px;
-        padding: 1.5rem;
-        margin: 1rem 0;
-        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-    }
-    
-    /* Sidebar styling */
-    .sidebar .sidebar-content {
-        background: linear-gradient(180deg, #2c3e50, #34495e);
-    }
-    
-    /* Success/Error message styling */
-    .stSuccess {
-        background: linear-gradient(90deg, #56ab2f, #a8e6cf);
-        border-radius: 10px;
-    }
-    
-    .stError {
-        background: linear-gradient(90deg, #ff416c, #ff4b2b);
-        border-radius: 10px;
-    }
-    
-    /* Button styling */
-    .stButton > button {
-        background: linear-gradient(45deg, #667eea, #764ba2);
-        color: white;
-        border-radius: 25px;
-        border: none;
-        padding: 0.75rem 2rem;
-        font-weight: bold;
-        font-size: 1.1rem;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-    }
-    
-    .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
-    }
-    
-    /* Progress bar styling */
-    .stProgress .st-bo {
-        background: linear-gradient(90deg, #ff6b6b, #ee5a52);
-    }
-    
-    /* File uploader styling */
-    .uploadedFile {
-        border: 2px dashed #667eea;
-        border-radius: 15px;
-        padding: 2rem;
-        background: rgba(255, 255, 255, 0.05);
-    }
-</style>
-""", unsafe_allow_html=True)
 
-# --- CHANGED CODE: Load the new CNN model and class names ---
-@st.cache_resource
-def load_models():
-    try:
-        model = tf.keras.models.load_model('best_cnn_model.keras')
-        class_names = np.load('class_names.npy', allow_pickle=True)
-        return model, class_names, True
-    except (IOError, OSError) as e:
-        return None, None, False
+@st.cache_resource(show_spinner="Loading model…")
+def load_predictor() -> GenrePredictor | None:
+    if not config.MODEL_PATH.exists():
+        return None
+    return GenrePredictor()
 
-model, class_names, MODEL_LOADED = load_models()
 
-# --- NEW FUNCTION: Preprocesses a single audio file into an image tensor ---
-def preprocess_audio_for_cnn(audio_path, duration=30, n_mels=128, fmax=8000, target_size=(128, 431)):
-    """
-    Converts an audio file into a preprocessed image tensor that matches
-    the input requirements of the trained CNN model.
-    """
-    try:
-        # 1. Load Audio
-        y, sr = librosa.load(audio_path, duration=duration)
-        if len(y) < duration * sr: # Pad short audio clips
-            y = np.pad(y, (0, duration * sr - len(y)))
-            
-        # 2. Create Mel Spectrogram (using same parameters as training)
-        S = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=n_mels, fmax=fmax)
-        S_dB = librosa.power_to_db(S, ref=np.max)
+def pretty(genre: str) -> str:
+    return {"hiphop": "Hip-Hop", "soul_rnb": "Soul / R&B"}.get(genre, genre.capitalize())
 
-        # 3. Convert spectrogram to a clean image in memory
-        fig, ax = plt.subplots(figsize=(10, 4))
-        librosa.display.specshow(S_dB, sr=sr, x_axis='time', y_axis='mel', fmax=fmax, ax=ax)
-        ax.set_axis_off()
-        fig.tight_layout(pad=0)
-        
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', bbox_inches='tight', pad_inches=0)
-        plt.close(fig)
-        buf.seek(0)
-        
-        # 4. Load image with PIL and preprocess for the model
-        img = Image.open(buf).convert('RGB')
-        img = img.resize((target_size[1], target_size[0])) # Note: PIL resize is (width, height)
-        
-        # 5. Convert to tensor and add a batch dimension
-        img_array = tf.keras.preprocessing.image.img_to_array(img)
-        img_array = tf.expand_dims(img_array, 0)
 
-        return img_array, y, sr
-    except Exception as e:
-        st.error(f"Error preprocessing audio: {e}")
-        return None, None, None
-
-# --- UNCHANGED: Your visualization functions are preserved ---
-def create_feature_plots(audio_data, sr):
-    fig = make_subplots(rows=1, cols=1, subplot_titles=["Audio Waveform"])
-    time_axis = np.linspace(0, len(audio_data)/sr, len(audio_data))
-    fig.add_trace(go.Scatter(x=time_axis, y=audio_data, mode='lines', name='Waveform', line=dict(color='#ff6b6b')), row=1, col=1)
-    fig.update_layout(height=400, showlegend=False, title_text="Audio Waveform Analysis", title_x=0.5, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+def plot_layout(fig: go.Figure, height: int = 380, **kw) -> go.Figure:
+    fig.update_layout(template="plotly_dark", height=height, paper_bgcolor="rgba(0,0,0,0)",
+                      plot_bgcolor="rgba(0,0,0,0)", margin=dict(l=10, r=10, t=30, b=10), **kw)
     return fig
 
-def create_confidence_chart(probabilities, genre_names):
-    fig = go.Figure(data=[go.Bar(x=genre_names, y=probabilities * 100, marker=dict(color=probabilities, colorscale='Viridis', showscale=True, colorbar=dict(title="Confidence %")), text=[f"{prob*100:.1f}%" for prob in probabilities], textposition='auto')])
-    fig.update_layout(title="Genre Confidence Scores", xaxis_title="Music Genres", yaxis_title="Confidence (%)", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='white'), height=400)
-    return fig
 
-# --- UNCHANGED: Your custom header and sidebar ---
-st.markdown("""<div class="main-header"><h1 style="color: white; margin: 0; font-size: 3rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">🎵 AI Music Genre Classifier</h1><p style="color: white; margin: 10px 0 0 0; font-size: 1.2rem; opacity: 0.9;">Powered by Deep Learning & Advanced Audio Signal Processing</p></div>""", unsafe_allow_html=True)
+def probability_chart(pred) -> go.Figure:
+    order = np.argsort(pred.probabilities)
+    names = [pretty(pred.classes[i]) for i in order]
+    vals = pred.probabilities[order] * 100
+    fig = go.Figure(go.Bar(x=vals, y=names, orientation="h", marker_color=ACCENT,
+                           text=[f"{v:.1f}%" for v in vals], textposition="outside", cliponaxis=False))
+    fig.update_xaxes(title="Probability (%)", range=[0, max(100, vals.max() * 1.15)])
+    return plot_layout(fig, height=max(360, 28 * len(names)))
+
+
+def spectrogram_chart(result) -> go.Figure:
+    t, f, S = result["spec"]
+    fig = go.Figure(go.Heatmap(x=t, y=f, z=S, colorscale="Magma", zmin=-80, zmax=0,
+                               colorbar=dict(title="dB")))
+    fig.update_xaxes(title="Time (s)")
+    fig.update_yaxes(title="Frequency (Hz, mel scale)", type="log")
+    return plot_layout(fig)
+
+
+def waveform_chart(result) -> go.Figure:
+    t, lo, hi = result["wave"]
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=t, y=hi, line=dict(width=0), showlegend=False, hoverinfo="skip"))
+    fig.add_trace(go.Scatter(x=t, y=lo, fill="tonexty", line=dict(width=0), fillcolor="rgba(236,72,153,.6)",
+                             showlegend=False, hoverinfo="skip"))
+    fig.update_xaxes(title="Time (s)")
+    fig.update_yaxes(title="Amplitude", range=[-1, 1])
+    return plot_layout(fig, height=300)
+
+
+def timeline_chart(pred) -> go.Figure:
+    """Per-section probabilities: shows whether the verdict is stable across the song."""
+    keep = [i for i in range(len(pred.classes)) if pred.window_probabilities[:, i].max() > 0.05]
+    fig = go.Figure(go.Heatmap(
+        x=[f"{t:.0f}s" for t in pred.window_times], y=[pretty(pred.classes[i]) for i in keep],
+        z=pred.window_probabilities[:, keep].T * 100, colorscale="Viridis", zmin=0, zmax=100,
+        colorbar=dict(title="%")))
+    fig.update_xaxes(title="Start of each 10-second section", type="category")
+    return plot_layout(fig, height=max(260, 34 * len(keep) + 120))
+
+
+def analyse(predictor: GenrePredictor, uploaded) -> dict:
+    suffix = "." + uploaded.name.rsplit(".", 1)[-1].lower()
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(uploaded.getbuffer())
+        path = tmp.name
+    try:
+        with st.status("Analysing…", expanded=True) as status:
+            status.write("Decoding audio")
+            y = load_audio(path)
+            status.write(f"Classifying the whole song ({len(y) / config.SAMPLE_RATE:.0f} s)")
+            pred = predictor.predict(y, progress=status.write)
+            status.write("Rendering charts")
+            result = {"pred": pred, "duration": len(y) / config.SAMPLE_RATE,
+                      "spec": mel_spectrogram_db(y, config.SAMPLE_RATE),
+                      "wave": waveform_envelope(y, config.SAMPLE_RATE)}
+            status.update(label="Analysis complete", state="complete", expanded=False)
+        return result
+    finally:
+        os.remove(path)
+
+
+def render_result(result: dict) -> None:
+    pred = result["pred"]
+    left, right = st.columns([3, 2], gap="large")
+    with left:
+        if pred.uncertain:
+            a, b = pred.top[0], pred.top[1]
+            st.markdown(
+                f'<div class="result-card uncertain"><div class="label">Verdict</div>'
+                f'<div class="genre">Not sure</div>'
+                f'<div class="meta">Closest: <b>{pretty(a[0])}</b> ({a[1]:.0%}) or <b>{pretty(b[0])}</b> ({b[1]:.0%}).<br>'
+                f'Why: {pred.reason}.</div></div>', unsafe_allow_html=True)
+            st.caption("The model only knows the genres listed in the sidebar. Rather than force a confident "
+                       "answer on music that does not fit them well, it says so.")
+        else:
+            st.markdown(
+                f'<div class="result-card confident"><div class="label">Predicted genre</div>'
+                f'<div class="genre">{pretty(pred.label)}</div>'
+                f'<div class="meta">Confidence {pred.confidence:.0%} · '
+                f'{pred.agreement:.0%} of the song\'s sections agree</div></div>', unsafe_allow_html=True)
+    with right:
+        st.markdown("**Top 3**")
+        for g, p in pred.top:
+            st.progress(min(max(p, 0.0), 1.0), text=f"{pretty(g)} — {p:.1%}")
+
+    tab_prob, tab_spec, tab_wave, tab_time = st.tabs(["Probabilities", "Spectrogram", "Waveform", "Over time"])
+    with tab_prob:
+        st.plotly_chart(probability_chart(pred), use_container_width=True)
+    with tab_spec:
+        st.plotly_chart(spectrogram_chart(result), use_container_width=True)
+        st.caption("Log-mel spectrogram of the full upload (brighter = louder).")
+    with tab_wave:
+        st.plotly_chart(waveform_chart(result), use_container_width=True)
+    with tab_time:
+        st.plotly_chart(timeline_chart(pred), use_container_width=True)
+        st.caption("Each column is one 10-second section. A song that changes style shows up here.")
+
+
+# ------------------------------------------------------------------------------ page
+st.markdown(
+    '<div class="hero"><h1>🎵 AI Music Genre Classifier</h1>'
+    "<p>Analyses the whole song with a pretrained audio transformer and says when it is unsure.</p></div>",
+    unsafe_allow_html=True,
+)
+
+predictor = load_predictor()
 
 with st.sidebar:
-    st.markdown("## ⚙️ Advanced Settings")
-    st.markdown("### 🎚️ Audio Processing")
-    duration = st.slider("Analysis Duration (seconds)", 10, 60, 30)
-    # The n_mfcc slider is no longer relevant for the CNN model, so it has been removed.
-    st.markdown("### 🔍 Feature Analysis")
-    show_waveform = st.checkbox("Show Audio Visualizations", value=True)
-    show_confidence = st.checkbox("Show Confidence Breakdown", value=True)
-    
-    if MODEL_LOADED:
-        st.markdown("### 📊 Model Info")
-        st.success("✅ Model Loaded Successfully")
-        st.write(f"**Genres:** {len(class_names)}")
-        with st.expander("View All Genres"):
-            for i, genre in enumerate(class_names):
-                st.write(f"{i+1}. {genre.capitalize()}")
+    st.header("About this model")
+    if predictor is None:
+        st.error("Model file missing.")
+        st.caption("Train it first: see the README, section “Train it yourself”.")
     else:
-        st.markdown("### ❌ Model Status")
-        st.error("Model files missing!")
-        st.markdown("""**Required files:**\n- `best_cnn_model.keras`\n- `class_names.npy`""")
+        m = predictor.metrics
+        if m:
+            st.metric("Test accuracy", f"{m['accuracy']:.0%}", help=f"Track-level, {m['test_tracks']} held-out tracks")
+            st.caption(f"Macro F1 {m['macro_f1']:.2f} · calibration error {m['ece']:.2f}")
+        st.markdown("**Genres it knows**")
+        st.write(", ".join(pretty(g) for g in predictor.classes))
+        st.caption("Anything outside this list (or hard to place) is reported as “Not sure” instead of guessed.")
 
-# Main content area (Your layout is preserved)
-col1, col2 = st.columns([2, 1])
+if predictor is None:
+    st.stop()
 
-with col1:
-    st.markdown("## 📁 Upload Your Music")
-    uploaded_file = st.file_uploader("Choose an audio file...", type=["wav", "mp3", "flac", "ogg"], help="Supported formats: WAV, MP3, FLAC, OGG. Optimal length: 30 seconds")
-    
-    if uploaded_file is not None:
-        file_details = {"Filename": uploaded_file.name, "File size": f"{uploaded_file.size / 1024 / 1024:.2f} MB", "Upload time": datetime.now().strftime("%H:%M:%S")}
-        st.markdown("### 📋 File Information")
-        info_cols = st.columns(3)
-        for i, (key, value) in enumerate(file_details.items()):
-            with info_cols[i]:
-                st.metric(label=key, value=value)
-        st.markdown("### 🎧 Audio Player")
-        st.audio(uploaded_file, format='audio/wav')
+uploaded = st.file_uploader("Upload a song", type=list(MIME), help="MP3, WAV, FLAC, OGG or M4A, up to 50 MB.")
 
-with col2:
-    st.markdown("## 📈 Quick Stats")
-    if MODEL_LOADED:
-        stats_data = {"Model Type": "CNN (TensorFlow)", "Features": "Mel Spectrogram Images", "Processing": "Real-time", "Accuracy": "High Precision"}
-        for stat, value in stats_data.items():
-            st.markdown(f"""<div class="metric-card"><h4 style="margin:0; color: white;">{stat}</h4><p style="margin:0; color: #a0a0a0;">{value}</p></div>""", unsafe_allow_html=True)
+if uploaded is None:
+    st.session_state.pop("result", None)
+    c = st.columns(3)
+    for col, (icon, title, text) in zip(c, [
+        ("🎧", "1 · Upload", "Any song, any length. The whole track is used, not just the intro."),
+        ("🧠", "2 · Analyse", "A pretrained audio transformer listens to evenly spaced 10-second sections."),
+        ("📊", "3 · Review", "See the verdict, the evidence over time, and a warning when it is unsure."),
+    ]):
+        col.markdown(f"**{icon} {title}**")
+        col.caption(text)
+else:
+    key = hashlib.sha1(uploaded.getbuffer()).hexdigest()
+    ext = uploaded.name.rsplit(".", 1)[-1].lower()
+    info, player = st.columns([2, 3], gap="large")
+    with info:
+        st.markdown(f"**{uploaded.name}**")
+        st.caption(f"{uploaded.size / 1e6:.1f} MB")
+    with player:
+        st.audio(uploaded, format=MIME.get(ext, "audio/mpeg"))
 
-if uploaded_file is not None and MODEL_LOADED:
-    st.markdown("---")
-    st.markdown("## 🎯 Genre Classification")
-    
-    classify_col1, classify_col2, classify_col3 = st.columns([1, 2, 1])
-    with classify_col2:
-        if st.button("🚀 Analyze Music Genre", type="primary", use_container_width=True):
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            
-            status_text.text("📁 Saving audio file...")
-            progress_bar.progress(10)
-            file_extension = uploaded_file.name.split('.')[-1].lower()
-            temp_filename = f"temp.{file_extension}"
-            with open(temp_filename, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            
-            # --- CHANGED CODE: New prediction logic for CNN model ---
-            status_text.text("🖼️ Converting audio to spectrogram...")
-            progress_bar.progress(30)
-            time.sleep(0.5)
-            
-            image_tensor, audio_data, sr = preprocess_audio_for_cnn(temp_filename, duration=duration)
-            
-            if image_tensor is not None:
-                status_text.text("🧠 Making prediction...")
-                progress_bar.progress(80)
-                time.sleep(0.3)
-                
-                prediction_probabilities = model.predict(image_tensor)[0]
-                prediction_index = np.argmax(prediction_probabilities)
-                predicted_genre = class_names[prediction_index]
-                confidence = np.max(prediction_probabilities) * 100
-                
-                status_text.text("✅ Analysis complete!")
-                progress_bar.progress(100)
-                time.sleep(0.5)
-                progress_bar.empty()
-                status_text.empty()
-                
-                # --- UNCHANGED: Your beautiful results display is preserved ---
-                result_col1, result_col2 = st.columns([1, 1])
-                with result_col1:
-                    st.markdown(f"""<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 2rem; border-radius: 20px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.3); margin: 1rem 0;"><h2 style="color: white; margin: 0;">🎵 Predicted Genre</h2><h1 style="color: #ffff00; margin: 10px 0; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">{predicted_genre.upper()}</h1><h3 style="color: white; margin: 0;">Confidence: {confidence:.1f}%</h3></div>""", unsafe_allow_html=True)
-                
-                with result_col2:
-                    if confidence >= 80: confidence_color, confidence_text = "#2ecc71", "Very High"
-                    elif confidence >= 60: confidence_color, confidence_text = "#f39c12", "High"
-                    elif confidence >= 40: confidence_color, confidence_text = "#e67e22", "Medium"
-                    else: confidence_color, confidence_text = "#e74c3c", "Low"
-                    st.markdown(f"""<div style="background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 20px; text-align: center; margin: 1rem 0;"><h3 style="color: white;">Confidence Level</h3><div style="background: #333; border-radius: 25px; padding: 5px; margin: 1rem 0;"><div style="background: {confidence_color}; width: {confidence}%; height: 30px; border-radius: 20px; display: flex; align-items: center; justify-content: center;"><span style="color: white; font-weight: bold;">{confidence:.1f}%</span></div></div><p style="color: {confidence_color}; font-size: 1.2rem; margin: 0;">{confidence_text}</p></div>""", unsafe_allow_html=True)
-                
-                if show_confidence:
-                    st.markdown("### 📊 Genre Confidence Breakdown")
-                    confidence_fig = create_confidence_chart(prediction_probabilities, class_names)
-                    st.plotly_chart(confidence_fig, use_container_width=True)
-                    top_3_indices = np.argsort(prediction_probabilities)[-3:][::-1]
-                    st.markdown("#### 🏆 Top 3 Predictions")
-                    top3_cols = st.columns(3)
-                    medals = ["🥇", "🥈", "🥉"]
-                    colors = ["#ffd700", "#c0c0c0", "#cd7f32"]
-                    for i, idx in enumerate(top_3_indices):
-                        genre, prob = class_names[idx], prediction_probabilities[idx] * 100
-                        with top3_cols[i]:
-                            st.markdown(f"""<div style="background: {colors[i]}; background: linear-gradient(135deg, {colors[i]}, {colors[i]}88); padding: 1rem; border-radius: 15px; text-align: center; margin: 0.5rem 0;"><h3 style="margin: 0; color: white;">{medals[i]} {genre.capitalize()}</h3><p style="margin: 0; color: white; font-size: 1.1rem;">{prob:.1f}%</p></div>""", unsafe_allow_html=True)
-                
-                if show_waveform and audio_data is not None:
-                    st.markdown("### 🌊 Audio Analysis Visualization")
-                    viz_fig = create_feature_plots(audio_data, sr)
-                    st.plotly_chart(viz_fig, use_container_width=True)
-                
-                if os.path.exists(temp_filename):
-                    os.remove(temp_filename)
-            else:
-                st.error("❌ Failed to process the audio file.")
-
-# --- UNCHANGED: Your footer and welcome screen are preserved ---
-if not uploaded_file:
-    st.markdown("---")
-    st.markdown("## 🚀 How It Works")
-    info_cols = st.columns(4)
-    steps = [("📤", "Upload", "Upload your audio file"), ("🖼️", "Analyze", "Convert audio to a spectrogram image"), ("🧠", "Classify", "CNN model predicts the genre"), ("📊", "Results", "View detailed analysis scores")]
-    for i, (icon, title, desc) in enumerate(steps):
-        with info_cols[i]:
-            st.markdown(f"""<div style="text-align: center; padding: 1.5rem; background: rgba(255,255,255,0.1); border-radius: 15px; margin: 0.5rem 0;"><div style="font-size: 3rem; margin-bottom: 1rem;">{icon}</div><h4 style="color: white; margin: 0.5rem 0;">{title}</h4><p style="color: #a0a0a0; font-size: 0.9rem; margin: 0;">{desc}</p></div>""", unsafe_allow_html=True)
+    if st.session_state.get("result_key") != key:
+        st.session_state.pop("result", None)
+    if st.button("Analyse genre", type="primary"):
+        try:
+            st.session_state["result"] = analyse(predictor, uploaded)
+            st.session_state["result_key"] = key
+        except AudioError as exc:
+            st.error(str(exc))
+    if "result" in st.session_state and st.session_state.get("result_key") == key:
+        render_result(st.session_state["result"])
 
 st.markdown("---")
-st.markdown("""<div style="text-align: center; padding: 2rem; color: #a0a0a0;"><p>🎵 Built with Streamlit, Librosa, and TensorFlow ✨</p><p>Upload your music and discover its genre with AI-powered analysis!</p></div>""", unsafe_allow_html=True)
+st.caption("Built with Streamlit, PyTorch and an AudioSet-pretrained Audio Spectrogram Transformer. "
+           "Predictions are statistical guesses; see the README for limitations.")

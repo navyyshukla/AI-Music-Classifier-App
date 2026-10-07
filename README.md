@@ -1,87 +1,78 @@
-# AI Music Genre Classifier 🎵
+# AI Music Genre Classifier
 
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://ai-music-classifier.streamlit.app/##ai-music-genre-classifier)
+Upload a song, get a genre, and a straight answer when the model is **not sure**.
 
-**[➡️ Click Here to View the Live Application](https://ai-music-classifier.streamlit.app/##ai-music-genre-classifier)**
+The app analyses the **whole song** (evenly spaced 10 s sections), embeds each with a pretrained
+**Audio Spectrogram Transformer** (AudioSet), classifies with a small calibrated head, and combines the
+sections. Low confidence or disagreement between sections shows "Not sure" instead of a forced label.
 
-This project is an end-to-end deep learning application that automatically classifies the genre of a piece of music from a raw audio file. It leverages advanced audio signal processing and computer vision techniques to achieve high accuracy on the GTZAN dataset.
+Numbers below come from `reports/metrics.json` (567 held-out test tracks, split by track, 13 genres).
 
-The entire pipeline, from data processing to a fully interactive web application, has been built and deployed on Streamlit Community Cloud.
+| Metric | Value |
+|---|---|
+| Accuracy / macro-F1 | 68.3% / 0.66 |
+| Accuracy by source | GTZAN 84.0%, FMA 64.9% |
+| Expected calibration error | 0.04 |
+| Accuracy on accepted predictions / coverage | 79.5% on 77.4% of tracks (abstains below 50% confidence) |
+| Modern-song check (`reports/ood_summary.json`) | not run yet: needs your own songs in `Data/ood/` |
 
-## Key Features
+## Run the app
 
-* **Deep Learning with CNNs:** Utilizes Convolutional Neural Networks (CNNs), the state-of-the-art for image-based pattern recognition, to classify music genres with high accuracy.
-* **Audio to Image Conversion:** Transforms raw audio signals into Mel Spectrograms, converting the audio classification problem into a more powerful image classification task.
-* **Advanced Data Augmentation:** The training dataset is automatically augmented (noise injection, pitch shifting, time stretching) to create a larger, more robust dataset, significantly improving the model's ability to generalize.
-* **Multi-Model Comparison:** The training pipeline builds and evaluates three different CNN architectures (including a powerful transfer learning model with MobileNetV2) and automatically selects the best-performing one for deployment.
-* **Interactive Web Application:** A beautiful and user-friendly web interface built with Streamlit that allows users to upload their own audio files and receive real-time predictions and visualizations.
-* **End-to-End MLOps:** The project covers the complete machine learning lifecycle, from data preprocessing and model training to version control with Git and final deployment on a cloud platform.
+```bash
+git clone https://github.com/navyyshukla/AI-Music-Classifier-App
+cd AI-Music-Classifier-App
+python3.11 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt        # ffmpeg is needed for MP3: brew install ffmpeg
+streamlit run app.py
+```
 
----
+## Train it yourself
 
-## Tech Stack
+1. Download into `Data/`:
+   - GTZAN → `Data/genres_original/<genre>/*.wav`
+   - FMA metadata → `Data/fma_metadata/tracks.csv`, FMA-medium audio → `Data/fma_medium/<NNN>/<NNNNNN>.mp3`
+     (<https://github.com/mdeff/fma>)
+2. Embed tracks once (resumable, a couple of hours on a laptop for ~8k tracks):
+   `python -m genre_classifier.extract --per-class 600`
+3. Train, calibrate and evaluate: `python -m genre_classifier.train`
+   (writes `models/genre_head.joblib`, `reports/metrics.json`, confusion matrix, reliability diagram)
+4. Check on real modern songs: put files in `Data/ood/<genre>/song.mp3` then
+   `python -m genre_classifier.evaluate --ood-dir Data/ood`
+5. `pytest -q`
 
-* **Core Language:** Python
-* **Data Processing & Machine Learning:**
-    * **TensorFlow / Keras:** For building, training, and evaluating the CNN models.
-    * **Librosa:** For advanced audio signal processing and Mel Spectrogram generation.
-    * **Scikit-learn:** For performance metrics and data splitting.
-    * **NumPy & Pandas:** For numerical data manipulation.
-* **Web Application & Visualization:**
-    * **Streamlit:** For creating and serving the interactive web application.
-    * **Plotly & Matplotlib:** For generating dynamic charts and spectrogram images.
-* **Deployment & Version Control:**
-    * **Streamlit Community Cloud:** For hosting the live application.
-    * **GitHub:** For version control and as the deployment source.
-    * **Git LFS (Large File Storage):** For handling the large trained model file.
+## Design
 
----
+```
+audio -> 16 kHz mono -> up to 18 evenly spaced 10 s windows (silence dropped)
+      -> AST embedding (768-d) per window -> scaler + logistic regression
+      -> mean of logits over windows -> temperature scaling -> probabilities
+      -> abstain if confidence < tau or windows disagree (tau tuned on validation data)
+```
 
-## How to Run This Project Locally
+* **No leakage:** splits are by track (FMA: official artist-aware split; GTZAN: stratified by track);
+  `data.check_no_leakage` fails training if an artist spans two splits. The test set is read once.
+* **13 genres:** blues, classical, country, disco, electronic, folk, hip-hop, jazz, metal, pop, reggae,
+  rock, soul/R&B (GTZAN + FMA, mapping in `genre_classifier/data.py`).
+* Small model file (KBs), no Git LFS, no TensorFlow.
 
-To set up and run this project on your own machine, follow these steps.
+## Limitations
 
-### Prerequisites
-* Git and Git LFS installed.
-* Python 3.10+ installed.
+* A closed set of 13 genres; real songs are often blends. Treat the output as a guess, not a fact.
+* GTZAN is old and has known duplicates/mislabels; FMA labels are user-submitted and noisy.
+  Disco, metal and reggae come only from GTZAN's small sample.
+* Calibration is measured on in-distribution data. The modern-song check is the honest test of
+  generalisation; extend it before trusting the thresholds.
+* The AST encoder needs ~1 GB RAM; first load downloads ~350 MB of weights.
 
-### Step-by-Step Instructions
+## What went wrong in v1
 
-1.  **Clone the repository:**
-    ```bash
-    git clone [https://github.com/navyyshukla/AI-Music-Classifier-App](https://github.com/navyyshukla/AI-Music-Classifier-App)
-    cd your-repository-name
-    ```
+The first version (kept in `legacy/`) reported ~96% accuracy because augmented spectrogram images of the
+same track were split across train and validation. It also analysed only the first 30 seconds, forced a
+softmax answer over 10 genres, and kept results inside a button callback so charts vanished on any
+interaction. v2 fixes the split, uses a pretrained encoder, analyses the whole song, calibrates and
+abstains, and renders results from session state.
 
-2.  **Create and activate a virtual environment:**
-    ```bash
-    python -m venv .venv
-    # On Windows
-    .venv\Scripts\activate
-    # On macOS/Linux
-    source .venv/bin/activate
-    ```
+## Roadmap
 
-3.  **Install all required libraries:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-4.  **Download the Data:** This repository does not include the raw audio data. Please download the **GTZAN Genre Collection** dataset and ensure the `genres_original` folder is placed inside a `Data` folder in the project root.
-
-5.  **Run the Feature Extraction Script:** This will create the necessary spectrogram images. This will take 15-20 minutes.
-    ```bash
-    python feature_extractor.py
-    ```
-
-6.  **Run the Model Training Script:** This will train the CNN models and save the best one. This can take a long time (30 minutes to over an hour).
-    ```bash
-    python train_model.py
-    ```
-
-7.  **Run the Streamlit Application:** Once the model is trained, you can launch the web app.
-    ```bash
-    streamlit run app.py
-    ```
-
-The application will now be running locally in your web browser!
+Fine-tune the encoder's top layers; add multi-label tags and more modern data; per-genre abstain
+thresholds; compare against the v1 CNN on the same leak-free split.

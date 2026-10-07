@@ -1,0 +1,111 @@
+{
+  "test_tracks": 567,
+  "accuracy": 0.6825396825396826,
+  "macro_f1": 0.663619402285174,
+  "ece": 0.04022249576772432,
+  "selective": {
+    "threshold": 0.5,
+    "coverage": 0.7742504409171076,
+    "accuracy_on_accepted": 0.7949886104783599
+  },
+  "per_source_accuracy": {
+    "gtzan": 0.84,
+    "fma": 0.6488222698072805
+  },
+  "per_class": {
+    "blues": {
+      "precision": 0.5172413793103449,
+      "recall": 0.8333333333333334,
+      "f1-score": 0.6382978723404256,
+      "support": 18.0
+    },
+    "classical": {
+      "precision": 0.9571428571428572,
+      "recall": 0.9571428571428572,
+      "f1-score": 0.9571428571428572,
+      "support": 70.0
+    },
+    "country": {
+      "precision": 0.7586206896551724,
+      "recall": 0.7857142857142857,
+      "f1-score": 0.7719298245614035,
+      "support": 28.0
+    },
+    "disco": {
+      "precision": 0.5625,
+      "recall": 0.9,
+      "f1-score": 0.6923076923076923,
+      "support": 10.0
+    },
+    "electronic": {
+      "precision": 0.6578947368421053,
+      "recall": 0.8333333333333334,
+      "f1-score": 0.7352941176470589,
+      "support": 60.0
+    },
+    "folk": {
+      "precision": 0.6739130434782609,
+      "recall": 0.5166666666666667,
+      "f1-score": 0.5849056603773585,
+      "support": 60.0
+    },
+    "hiphop": {
+      "precision": 0.8253968253968254,
+      "recall": 0.7428571428571429,
+      "f1-score": 0.7819548872180451,
+      "support": 70.0
+    },
+    "jazz": {
+      "precision": 0.7959183673469388,
+      "recall": 0.7959183673469388,
+      "f1-score": 0.7959183673469388,
+      "support": 49.0
+    },
+    "metal": {
+      "precision": 0.6923076923076923,
+      "recall": 0.9,
+      "f1-score": 0.782608695652174,
+      "support": 10.0
+    },
+    "pop": {
+      "precision": 0.4520547945205479,
+      "recall": 0.4714285714285714,
+      "f1-score": 0.46153846153846156,
+      "support": 70.0
+    },
+    "reggae": {
+      "precision": 0.7777777777777778,
+      "recall": 0.7,
+      "f1-score": 0.7368421052631579,
+      "support": 10.0
+    },
+    "rock": {
+      "precision": 0.6309523809523809,
+      "recall": 0.7571428571428571,
+      "f1-score": 0.6883116883116883,
+      "support": 70.0
+    },
+    "soul_rnb": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 42.0
+    }
+  },
+  "chance_accuracy": 0.07692307692307693,
+  "train_genres": [
+    "blues",
+    "classical",
+    "country",
+    "disco",
+    "electronic",
+    "folk",
+    "hiphop",
+    "jazz",
+    "metal",
+    "pop",
+    "reggae",
+    "rock",
+    "soul_rnb"
+  ]
+}
