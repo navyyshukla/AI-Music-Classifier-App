@@ -51,6 +51,12 @@ def load_predictor() -> GenrePredictor | None:
     return GenrePredictor()
 
 
+def human_size(n_bytes: int) -> str:
+    if n_bytes >= 1e6:
+        return f"{n_bytes / 1e6:.1f} MB"
+    return f"{max(n_bytes, 1) / 1e3:.0f} KB"
+
+
 def pretty(genre: str) -> str:
     return {"hiphop": "Hip-Hop", "soul_rnb": "Soul / R&B"}.get(genre, genre.capitalize())
 
@@ -150,21 +156,33 @@ def render_result(result: dict) -> None:
                 f'<div class="meta">Confidence {pred.confidence:.0%} · '
                 f'{pred.agreement:.0%} of the song\'s sections agree</div></div>', unsafe_allow_html=True)
     with right:
-        st.markdown("**Top 3**")
-        for g, p in pred.top:
-            st.progress(min(max(p, 0.0), 1.0), text=f"{pretty(g)} — {p:.1%}")
+        if pred.out_of_distribution:
+            st.markdown("**Why no genre?**")
+            st.metric("Music score", f"{pred.music_prob:.0%}",
+                      help="How strongly the pretrained encoder recognises this as music (AudioSet 'Music' class).")
+            st.caption("Genre scores are hidden because they would be meaningless for audio that is not music.")
+        else:
+            st.markdown("**Top 3**")
+            for g, p in pred.top:
+                st.progress(min(max(p, 0.0), 1.0), text=f"{pretty(g)} — {p:.1%}")
 
-    tab_prob, tab_spec, tab_wave, tab_time = st.tabs(["Probabilities", "Spectrogram", "Waveform", "Over time"])
-    with tab_prob:
-        st.plotly_chart(probability_chart(pred), use_container_width=True)
+    if pred.out_of_distribution:
+        tab_spec, tab_wave = st.tabs(["Spectrogram", "Waveform"])
+        tab_prob = tab_time = None
+    else:
+        tab_prob, tab_spec, tab_wave, tab_time = st.tabs(["Probabilities", "Spectrogram", "Waveform", "Over time"])
+    if tab_prob is not None:
+        with tab_prob:
+            st.plotly_chart(probability_chart(pred), use_container_width=True)
     with tab_spec:
         st.plotly_chart(spectrogram_chart(result), use_container_width=True)
         st.caption("Log-mel spectrogram of the full upload (brighter = louder).")
     with tab_wave:
         st.plotly_chart(waveform_chart(result), use_container_width=True)
-    with tab_time:
-        st.plotly_chart(timeline_chart(pred), use_container_width=True)
-        st.caption("Each column is one 10-second section. A song that changes style shows up here.")
+    if tab_time is not None:
+        with tab_time:
+            st.plotly_chart(timeline_chart(pred), use_container_width=True)
+            st.caption("Each column is one 10-second section. A song that changes style shows up here.")
 
 
 # ------------------------------------------------------------------------------ page
@@ -211,7 +229,7 @@ else:
     info, player = st.columns([2, 3], gap="large")
     with info:
         st.markdown(f"**{uploaded.name}**")
-        st.caption(f"{uploaded.size / 1e6:.1f} MB")
+        st.caption(human_size(uploaded.size))
     with player:
         st.audio(uploaded, format=MIME.get(ext, "audio/mpeg"))
 

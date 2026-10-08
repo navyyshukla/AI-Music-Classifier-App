@@ -2,6 +2,8 @@
 
 Upload a song, get a genre, and a straight answer when the model is **not sure**.
 
+**Live app: <https://ai-music-classifier-app.streamlit.app>**
+
 The app analyses the **whole song** (evenly spaced 10 s sections), embeds each with a pretrained
 **Audio Spectrogram Transformer** (AudioSet), classifies with a small calibrated head, and combines the
 sections. Low confidence or disagreement between sections shows "Not sure" instead of a forced label.
