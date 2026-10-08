@@ -1,102 +1,103 @@
 {
-  "test_tracks": 567,
-  "accuracy": 0.6825396825396826,
-  "macro_f1": 0.663619402285174,
-  "ece": 0.04022249576772432,
+  "test_tracks": 973,
+  "accuracy": 0.605344295991778,
+  "macro_f1": 0.5668250322808029,
+  "ece": 0.030666066052521805,
   "selective": {
     "threshold": 0.5,
-    "coverage": 0.7742504409171076,
-    "accuracy_on_accepted": 0.7949886104783599
+    "coverage": 0.5570400822199383,
+    "accuracy_on_accepted": 0.7859778597785978
   },
   "per_source_accuracy": {
-    "gtzan": 0.84,
-    "fma": 0.6488222698072805
+    "gtzan": 0.83,
+    "fma": 0.6659528907922913,
+    "jamendo": 0.4802955665024631
   },
   "per_class": {
     "blues": {
-      "precision": 0.5172413793103449,
-      "recall": 0.8333333333333334,
-      "f1-score": 0.6382978723404256,
-      "support": 18.0
+      "precision": 0.4090909090909091,
+      "recall": 0.5,
+      "f1-score": 0.45,
+      "support": 36.0
     },
     "classical": {
-      "precision": 0.9571428571428572,
-      "recall": 0.9571428571428572,
-      "f1-score": 0.9571428571428572,
-      "support": 70.0
+      "precision": 0.8939393939393939,
+      "recall": 0.8805970149253731,
+      "f1-score": 0.8872180451127819,
+      "support": 134.0
     },
     "country": {
-      "precision": 0.7586206896551724,
-      "recall": 0.7857142857142857,
-      "f1-score": 0.7719298245614035,
-      "support": 28.0
+      "precision": 0.5102040816326531,
+      "recall": 0.6578947368421053,
+      "f1-score": 0.5747126436781609,
+      "support": 38.0
     },
     "disco": {
-      "precision": 0.5625,
-      "recall": 0.9,
-      "f1-score": 0.6923076923076923,
-      "support": 10.0
+      "precision": 0.4782608695652174,
+      "recall": 0.7857142857142857,
+      "f1-score": 0.5945945945945946,
+      "support": 14.0
     },
     "electronic": {
-      "precision": 0.6578947368421053,
-      "recall": 0.8333333333333334,
-      "f1-score": 0.7352941176470589,
-      "support": 60.0
+      "precision": 0.5955882352941176,
+      "recall": 0.7363636363636363,
+      "f1-score": 0.6585365853658537,
+      "support": 110.0
     },
     "folk": {
-      "precision": 0.6739130434782609,
-      "recall": 0.5166666666666667,
-      "f1-score": 0.5849056603773585,
-      "support": 60.0
+      "precision": 0.6,
+      "recall": 0.5533980582524272,
+      "f1-score": 0.5757575757575758,
+      "support": 103.0
     },
     "hiphop": {
-      "precision": 0.8253968253968254,
-      "recall": 0.7428571428571429,
-      "f1-score": 0.7819548872180451,
-      "support": 70.0
+      "precision": 0.8043478260869565,
+      "recall": 0.7047619047619048,
+      "f1-score": 0.751269035532995,
+      "support": 105.0
     },
     "jazz": {
-      "precision": 0.7959183673469388,
-      "recall": 0.7959183673469388,
-      "f1-score": 0.7959183673469388,
-      "support": 49.0
+      "precision": 0.6363636363636364,
+      "recall": 0.6746987951807228,
+      "f1-score": 0.6549707602339181,
+      "support": 83.0
     },
     "metal": {
-      "precision": 0.6923076923076923,
-      "recall": 0.9,
-      "f1-score": 0.782608695652174,
-      "support": 10.0
+      "precision": 0.3584905660377358,
+      "recall": 0.9047619047619048,
+      "f1-score": 0.5135135135135135,
+      "support": 21.0
     },
     "pop": {
-      "precision": 0.4520547945205479,
-      "recall": 0.4714285714285714,
-      "f1-score": 0.46153846153846156,
-      "support": 70.0
+      "precision": 0.3904761904761905,
+      "recall": 0.3153846153846154,
+      "f1-score": 0.34893617021276596,
+      "support": 130.0
     },
     "reggae": {
-      "precision": 0.7777777777777778,
-      "recall": 0.7,
-      "f1-score": 0.7368421052631579,
-      "support": 10.0
+      "precision": 0.5652173913043478,
+      "recall": 0.5652173913043478,
+      "f1-score": 0.5652173913043478,
+      "support": 23.0
     },
     "rock": {
-      "precision": 0.6309523809523809,
-      "recall": 0.7571428571428571,
-      "f1-score": 0.6883116883116883,
-      "support": 70.0
+      "precision": 0.6238532110091743,
+      "recall": 0.5528455284552846,
+      "f1-score": 0.5862068965517241,
+      "support": 123.0
     },
     "soul_rnb": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1-score": 0.0,
-      "support": 42.0
+      "precision": 0.3333333333333333,
+      "recall": 0.1509433962264151,
+      "f1-score": 0.2077922077922078,
+      "support": 53.0
     }
   },
   "ood": {
-    "threshold": 107.62807498762314,
-    "music_gate_threshold": 0.2480389130115509,
-    "music_gate_test_false_reject_rate": 0.014109347442680775,
-    "test_false_reject_rate": 0.010582010582010581
+    "threshold": 102.26668258031697,
+    "music_gate_threshold": 0.2900675842165947,
+    "music_gate_test_false_reject_rate": 0.011305241521068859,
+    "test_false_reject_rate": 0.008221993833504625
   },
   "chance_accuracy": 0.07692307692307693,
   "train_genres": [

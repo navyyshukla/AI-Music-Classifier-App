@@ -4,6 +4,7 @@ Expected layout under Data/:
   Data/genres_original/<genre>/<genre>.NNNNN.wav          (GTZAN)
   Data/fma_metadata/tracks.csv                            (FMA metadata)
   Data/fma_medium/<NNN>/<NNNNNN>.mp3                      (FMA-medium audio)
+  Data/jamendo/...                                        (optional, see jamendo.py)
 """
 from __future__ import annotations
 
@@ -79,12 +80,24 @@ def fma_index(root: Path = config.DATA_DIR, per_class: int = 600, seed: int = 42
 _SPLIT_SHARE = {"train": 0.8, "val": 0.1, "test": 0.1}
 
 
-def build_index(per_class: int = 600, use_gtzan: bool = True, use_fma: bool = True) -> pd.DataFrame:
+def jamendo_index() -> pd.DataFrame:
+    """MTG-Jamendo tracks that have been unpacked under Data/jamendo/audio (see jamendo.py)."""
+    from . import jamendo
+
+    return pd.DataFrame(jamendo.index_rows())
+
+
+def build_index(per_class: int = 600, use_gtzan: bool = True, use_fma: bool = True,
+                use_jamendo: bool = True) -> pd.DataFrame:
     parts = []
     if use_gtzan:
         parts.append(gtzan_index())
     if use_fma:
         parts.append(fma_index(per_class=per_class))
+    if use_jamendo and (config.DATA_DIR / "jamendo" / "audio").exists():
+        jam = jamendo_index()
+        if len(jam):
+            parts.append(jam)
     if not parts:
         raise ValueError("Enable at least one dataset")
     df = pd.concat(parts, ignore_index=True)

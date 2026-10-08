@@ -26,10 +26,12 @@ def main() -> None:
     ap.add_argument("--per-class", type=int, default=600, help="max FMA tracks per genre")
     ap.add_argument("--no-fma", action="store_true")
     ap.add_argument("--no-gtzan", action="store_true")
+    ap.add_argument("--no-jamendo", action="store_true")
     ap.add_argument("--limit", type=int, default=0, help="only process N tracks (smoke test)")
     args = ap.parse_args()
 
-    df = build_index(args.per_class, use_gtzan=not args.no_gtzan, use_fma=not args.no_fma)
+    df = build_index(args.per_class, use_gtzan=not args.no_gtzan, use_fma=not args.no_fma,
+                     use_jamendo=not args.no_jamendo)
     if args.limit:
         df = df.sample(args.limit, random_state=0)
     (config.CACHE_DIR / "embeddings").mkdir(parents=True, exist_ok=True)

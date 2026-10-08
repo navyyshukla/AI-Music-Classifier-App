@@ -8,16 +8,38 @@ The app analyses the **whole song** (evenly spaced 10 s sections), embeds each w
 **Audio Spectrogram Transformer** (AudioSet), classifies with a small calibrated head, and combines the
 sections. Low confidence or disagreement between sections shows "Not sure" instead of a forced label.
 
-Numbers below come from `reports/metrics.json` (567 held-out test tracks, split by track, 13 genres).
+Numbers below come from `reports/metrics.json` (973 held-out test tracks from GTZAN, FMA and Jamendo,
+split by track and artist, 13 genres). Test tracks are never used for training or tuning.
 
 | Metric | Value |
 |---|---|
-| Accuracy / macro-F1 | 68.3% / 0.66 |
-| Accuracy by source | GTZAN 84.0%, FMA 64.9% |
-| Expected calibration error | 0.04 |
-| Accuracy on accepted predictions / coverage | 79.5% on 77.4% of tracks (abstains below 50% confidence) |
-| Non-music rejection | white/brown noise, tone, sweep, clicks and modulated noise are all rejected; 1.4% of real held-out tracks are wrongly rejected |
-| Modern-song check (`reports/ood_summary.json`) | not run yet: needs your own songs in `Data/ood/` |
+| Accuracy / macro-F1 (all sources) | 60.5% / 0.57 |
+| Accuracy by source | GTZAN 83.0%, FMA 66.6%, Jamendo 48.0% |
+| Expected calibration error | 0.03 |
+| Accuracy on accepted predictions / coverage | 78.6% on 55.7% of tracks (abstains below 50% confidence) |
+| Non-music rejection | white/brown noise, tone, sweep, clicks and modulated noise are all rejected; about 1% of real held-out tracks are wrongly rejected |
+
+**Why the headline number went down.** Version 1 reported 96% (a data leak). The first honest version scored
+68% on GTZAN + FMA. Adding Jamendo (modern, Creative Commons, labelled by uploaders) widens the test set to
+music that sounds like current releases, and that is harder: Jamendo accuracy is 48%.
+
+### Does adding modern data help? (Jamendo held-out artists, 406 tracks)
+
+| | Before (no Jamendo in training) | After |
+|---|---|---|
+| Accuracy if forced to answer | 47.5% | 48.0% |
+| Accuracy when it chooses to answer | 60.1% | 69.6% |
+| Confidently wrong (>= 80% sure) | 15 | 9 |
+| Metal / reggae / hip-hop recall | 36% / 8% / 40% | 82% / 39% / 57% |
+| Jazz / rock recall | 65% / 43% | 44% / 32% |
+| Pop / soul-R&B recall | 17% / 0% | 22% / 9% |
+
+Reading this honestly: the extra data helped small genres and made answers more trustworthy, but it did not
+fix pop and soul/R&B. A head trained **only** on Jamendo and tested on Jamendo also reaches just 49%, so the
+limit is the labels, not the amount of data: Jamendo's genre tags are chosen by uploaders and overlap heavily
+(pop tracks are most often predicted electronic, rock tracks metal, soul/R&B tracks pop). Fixing that needs
+cleaner labels for mainstream pop/R&B (for example your own labelled library) or a multi-label output, not more
+of the same tags. Reproduce with `python -m genre_classifier.compare --source jamendo`.
 
 ## Run the app
 
@@ -35,7 +57,10 @@ streamlit run app.py
    - GTZAN → `Data/genres_original/<genre>/*.wav`
    - FMA metadata → `Data/fma_metadata/tracks.csv`, FMA-medium audio → `Data/fma_medium/<NNN>/<NNNNNN>.mp3`
      (<https://github.com/mdeff/fma>)
-2. Embed tracks once (resumable, a couple of hours on a laptop for ~8k tracks):
+   - Optional, modern music: MTG-Jamendo (<https://github.com/MTG/mtg-jamendo-dataset>). Put
+     `autotagging_genre.tsv` and `raw_30s_audio-low-NN.tar` files in `Data/jamendo/` (and `tars/`), then
+     `python -m genre_classifier.jamendo prepare` unpacks only the tracks that map onto our genres.
+2. Embed tracks once (resumable, about 1.5 hours on a laptop for ~9k tracks):
    `python -m genre_classifier.extract --per-class 600`
 3. Train, calibrate and evaluate: `python -m genre_classifier.train`
    (writes `models/genre_head.joblib`, `reports/metrics.json`, confusion matrix, reliability diagram)

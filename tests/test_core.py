@@ -166,3 +166,16 @@ def test_predictor_marks_non_music_as_out_of_distribution(tmp_path):
                  "temperature": 1.0, "min_confidence": 0.0, "min_agreement": 0.0}, path)
     pred = GenrePredictor(path, encoder=FakeEncoder()).predict(tone(30))
     assert pred.out_of_distribution and pred.uncertain and "music" in pred.reason
+
+
+# ---- Jamendo label mapping -------------------------------------------------------------
+def test_jamendo_label_resolution_prefers_the_specific_genre():
+    from genre_classifier.jamendo import TAG_MAP, artist_split, low_name, unique_label
+
+    assert set(TAG_MAP.values()) <= set(config.GENRES)
+    assert unique_label(["pop", "rnb"]) == "soul_rnb"          # R&B tracks are nearly always also tagged pop
+    assert unique_label(["pop", "electronic"]) == "pop"
+    assert unique_label(["rock", "pop", "electronic"]) is None   # 3 genres: too ambiguous
+    assert unique_label(["ambient", "soundtrack"]) is None       # nothing we model
+    assert low_name("14/214.mp3") == "14/214.low.mp3"
+    assert artist_split("artist_000014") == artist_split("artist_000014") in {"train", "val", "test"}

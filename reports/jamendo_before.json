@@ -1,0 +1,63 @@
+{
+  "source": "jamendo",
+  "n_tracks": 406,
+  "accuracy_forced": 0.4754,
+  "coverage": 0.4877,
+  "accuracy_when_answering": 0.601,
+  "confidently_wrong": 15,
+  "rejected_as_not_music": 1,
+  "per_class": {
+    "blues": {
+      "n": 18,
+      "recall": 0.0
+    },
+    "classical": {
+      "n": 64,
+      "recall": 0.844
+    },
+    "country": {
+      "n": 10,
+      "recall": 0.2
+    },
+    "disco": {
+      "n": 4,
+      "recall": 0.0
+    },
+    "electronic": {
+      "n": 50,
+      "recall": 0.68
+    },
+    "folk": {
+      "n": 43,
+      "recall": 0.674
+    },
+    "hiphop": {
+      "n": 35,
+      "recall": 0.4
+    },
+    "jazz": {
+      "n": 34,
+      "recall": 0.647
+    },
+    "metal": {
+      "n": 11,
+      "recall": 0.364
+    },
+    "pop": {
+      "n": 60,
+      "recall": 0.167
+    },
+    "reggae": {
+      "n": 13,
+      "recall": 0.077
+    },
+    "rock": {
+      "n": 53,
+      "recall": 0.434
+    },
+    "soul_rnb": {
+      "n": 11,
+      "recall": 0.0
+    }
+  }
+}
