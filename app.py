@@ -127,7 +127,14 @@ def render_result(result: dict) -> None:
     pred = result["pred"]
     left, right = st.columns([3, 2], gap="large")
     with left:
-        if pred.uncertain:
+        if pred.out_of_distribution:
+            st.markdown(
+                '<div class="result-card uncertain"><div class="label">Verdict</div>'
+                '<div class="genre">Not music I know</div>'
+                f'<div class="meta">No genre given: {pred.reason}. '
+                'This usually means noise, speech, a test tone or an unusual recording.</div></div>',
+                unsafe_allow_html=True)
+        elif pred.uncertain:
             a, b = pred.top[0], pred.top[1]
             st.markdown(
                 f'<div class="result-card uncertain"><div class="label">Verdict</div>'

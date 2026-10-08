@@ -14,6 +14,7 @@ Numbers below come from `reports/metrics.json` (567 held-out test tracks, split 
 | Accuracy by source | GTZAN 84.0%, FMA 64.9% |
 | Expected calibration error | 0.04 |
 | Accuracy on accepted predictions / coverage | 79.5% on 77.4% of tracks (abstains below 50% confidence) |
+| Non-music rejection | white/brown noise, tone, sweep, clicks and modulated noise are all rejected; 1.4% of real held-out tracks are wrongly rejected |
 | Modern-song check (`reports/ood_summary.json`) | not run yet: needs your own songs in `Data/ood/` |
 
 ## Run the app
@@ -47,6 +48,8 @@ audio -> 16 kHz mono -> up to 18 evenly spaced 10 s windows (silence dropped)
       -> AST embedding (768-d) per window -> scaler + logistic regression
       -> mean of logits over windows -> temperature scaling -> probabilities
       -> abstain if confidence < tau or windows disagree (tau tuned on validation data)
+      -> reject as "not music" if the encoder's AudioSet "Music" score is low
+         or the embedding is far from every genre (Mahalanobis); both thresholds set on validation data
 ```
 
 * **No leakage:** splits are by track (FMA: official artist-aware split; GTZAN: stratified by track);

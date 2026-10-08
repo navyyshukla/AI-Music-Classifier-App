@@ -92,6 +92,12 @@
       "support": 42.0
     }
   },
+  "ood": {
+    "threshold": 107.62807498762314,
+    "music_gate_threshold": 0.2480389130115509,
+    "music_gate_test_false_reject_rate": 0.014109347442680775,
+    "test_false_reject_rate": 0.010582010582010581
+  },
   "chance_accuracy": 0.07692307692307693,
   "train_genres": [
     "blues",

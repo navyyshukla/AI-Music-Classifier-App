@@ -119,3 +119,50 @@ def test_waveform_envelope_is_small_and_bounded():
 def test_spectrogram_shapes():
     t, f, S = mel_spectrogram_db(tone(10), SR)
     assert S.shape == (len(f), len(t)) and S.max() <= 0.0 + 1e-6
+
+
+# ---- non-music rejection ---------------------------------------------------------------
+def test_ood_detector_flags_far_points_and_accepts_near_ones():
+    from genre_classifier.infer import OODDetector
+
+    rng = np.random.default_rng(0)
+    X = np.concatenate([rng.normal(loc=c, size=(300, 96)) for c in (0, 3)])
+    y = np.repeat([0, 1], 300)
+    det = OODDetector.fit(X, y)
+    near = det.track_score(rng.normal(loc=0, size=(5, 96)))
+    far = det.track_score(rng.normal(loc=12, size=(5, 96)))
+    assert far > 5 * near
+    det.threshold = (near + far) / 2
+    assert det.is_ood(far) and not det.is_ood(near)
+
+
+def test_music_gate_is_a_sigmoid_of_a_layernormed_linear_head():
+    from genre_classifier.infer import MusicGate
+
+    w = np.zeros(768)
+    w[0] = 1.0
+    gate = MusicGate(np.ones(768), np.zeros(768), 1e-12, w, 0.0, threshold=0.5)
+    rng = np.random.default_rng(1)
+    high = rng.normal(size=(4, 768))
+    high[:, 0] = 40.0                       # large positive normalised value on the weighted feature
+    low = rng.normal(size=(4, 768))
+    low[:, 0] = -40.0
+    assert gate.track_prob(high) > 0.9 and gate.track_prob(low) < 0.1
+    assert gate.is_not_music(gate.track_prob(low)) and not gate.is_not_music(gate.track_prob(high))
+
+
+def test_predictor_marks_non_music_as_out_of_distribution(tmp_path):
+    from genre_classifier.infer import MusicGate
+
+    rng = np.random.default_rng(0)
+    n = len(config.GENRES)
+    X = rng.normal(size=(120, 768))
+    y = np.arange(120) % n
+    scaler = StandardScaler().fit(X)
+    clf = LogisticRegression(max_iter=300).fit(scaler.transform(X), y)
+    gate = MusicGate(np.ones(768), np.zeros(768), 1e-12, np.zeros(768), -10.0, threshold=0.5)  # always ~0
+    path = tmp_path / "head.joblib"
+    joblib.dump({"classes": config.GENRES, "scaler": scaler, "clf": FullHead(clf, n), "gate": gate,
+                 "temperature": 1.0, "min_confidence": 0.0, "min_agreement": 0.0}, path)
+    pred = GenrePredictor(path, encoder=FakeEncoder()).predict(tone(30))
+    assert pred.out_of_distribution and pred.uncertain and "music" in pred.reason

@@ -19,7 +19,7 @@ from . import config
 from .data import check_no_leakage
 from .evaluate import expected_calibration_error, plot_confusion, plot_reliability, selective_stats
 from .extract import cache_path
-from .infer import FullHead, full_logits, softmax
+from .infer import FullHead, MusicGate, OODDetector, full_logits, softmax
 
 MIN_AGREEMENT = 0.34
 
@@ -86,6 +86,17 @@ def main() -> None:
             break
     print(f"C={C}, temperature={T:.2f}, abstain below {tau:.2f}")
 
+    # Out-of-distribution detector: threshold = 99th percentile of validation track scores.
+    ood = OODDetector.fit(scaler.transform(Xtr), ytr)
+    val_scores = np.array([ood.track_score(scaler.transform(Xva[tva == t])) for t in range(len(mva))])
+    ood.threshold = float(np.percentile(val_scores, 99))
+    print(f"OOD threshold {ood.threshold:.1f} (median val score {np.median(val_scores):.1f})")
+
+    gate = MusicGate.from_checkpoint(config.ENCODER_NAME)
+    val_music = np.array([gate.track_prob(Xva[tva == t]) for t in range(len(mva))])
+    gate.threshold = float(np.percentile(val_music, 1))
+    print(f"music-gate threshold {gate.threshold:.3f} (median val music score {np.median(val_music):.2f})")
+
     # ---- final, single look at the test split ----
     lt = full_logits(clf.classes_, track_logits(clf, scaler, Xte, tte, len(mte)), len(config.GENRES))
     pt = softmax(lt / T)
@@ -104,6 +115,12 @@ def main() -> None:
                                 for s in mte["source"].unique()},
         "per_class": {g: {k: report[g][k] for k in ("precision", "recall", "f1-score", "support")}
                       for g in config.GENRES},
+        "ood": {"threshold": ood.threshold,
+                "music_gate_threshold": gate.threshold,
+                "music_gate_test_false_reject_rate": float(np.mean(
+                    [gate.is_not_music(gate.track_prob(Xte[tte == t])) for t in range(len(mte))])),
+                "test_false_reject_rate": float(np.mean([
+                    ood.is_ood(ood.track_score(scaler.transform(Xte[tte == t]))) for t in range(len(mte))]))},
         "chance_accuracy": 1 / len(present),
         "train_genres": [config.GENRES[i] for i in present],
     }
@@ -114,11 +131,11 @@ def main() -> None:
 
     # Re-fit the head with all 13 genre slots so the app never needs to know which were present.
     bundle = {"classes": config.GENRES, "scaler": scaler, "clf": FullHead(clf, len(config.GENRES)),
-              "temperature": T, "min_confidence": tau, "min_agreement": MIN_AGREEMENT,
+              "ood": ood, "gate": gate, "temperature": T, "min_confidence": tau, "min_agreement": MIN_AGREEMENT,
               "metrics": {k: metrics[k] for k in ("accuracy", "macro_f1", "ece", "test_tracks", "selective")}}
     config.MODEL_PATH.parent.mkdir(exist_ok=True)
     joblib.dump(bundle, config.MODEL_PATH, compress=3)
-    print(json.dumps({k: metrics[k] for k in ("accuracy", "macro_f1", "ece", "selective", "per_source_accuracy")}, indent=2))
+    print(json.dumps({k: metrics[k] for k in ("accuracy", "macro_f1", "ece", "selective", "per_source_accuracy", "ood")}, indent=2))
     print("saved", config.MODEL_PATH)
 
 
